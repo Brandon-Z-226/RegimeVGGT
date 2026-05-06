@@ -44,6 +44,7 @@ python "${REPO_ROOT}/eval/eval_pose_tnt.py" \
     --merge_ratio_ours      0.50 \
     --deep_merge_ratio      0.99 \
     --cache_band_starts     0 10 18 \
+    --no_cache_layers       10 11 12 13 \
     --hyb_sigma_sub         1.3 \
     --hyb_sigma_shallow     1.5 \
     --hyb_sigma_deep        1.7 \

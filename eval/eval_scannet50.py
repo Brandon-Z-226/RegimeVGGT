@@ -70,6 +70,7 @@ HYBRID_CONFIG = dict(
     middle_merge_start=10,
     deep_merge_start=18,
     cache_band_starts=(0, 10, 18),
+    no_cache_layers=(10, 11, 12, 13),           # rank-peak: recompute every layer
     importance_method="dino_attn",
     protect_last=False,
     sigma_sub=1.3,                              # middle-band sigma (U-shape)

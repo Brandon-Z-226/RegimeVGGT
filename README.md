@@ -137,6 +137,7 @@ places (kept in sync): `eval/eval_scannet50.py:HYBRID_CONFIG`, the three
 | `merge_ratio`         | 0.50           | layers L10–17                     |
 | `deep_merge_ratio`    | 0.99           | layers L18+                       |
 | `cache_band_starts`   | (0, 10, 18)    | three-band index cache            |
+| `no_cache_layers`     | {10, 11, 12, 13} | rank-peak layers: recompute every layer |
 | `importance_method`   | `dino_attn`    | DINOv2 [CLS] saliency (Ψ)         |
 | `protect_middle`      | True           | L10–13 do merge-only              |
 | `middle_range`        | (10, 14)       | half-open, covers L10–13          |

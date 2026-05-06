@@ -51,6 +51,7 @@ def _run_regimevggt(model, imgs_tensor, args):
         middle_merge_start=args.middle_merge_start,
         deep_merge_start=args.deep_merge_start,
         cache_band_starts=(args.cache_band_starts if args.cache_band_starts else None),
+        no_cache_layers=(args.no_cache_layers if args.no_cache_layers else None),
         importance_method=args.importance,
         protect_last=(not args.no_protect_last),
         sigma_sub=args.hyb_sigma_sub,

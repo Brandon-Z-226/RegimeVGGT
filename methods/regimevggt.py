@@ -554,6 +554,12 @@ def run_aggregator_regimevggt(
     middle_merge_start: int = 10,
     deep_merge_start: int = 14,
     cache_band_starts=(0, 10, 14),
+    # Layer indices forced to recompute their merge index (cache miss).
+    # Used to recompute every layer in the rank-peak sub-band L10-13
+    # despite the band-aligned cache, since merge errors there propagate
+    # through the cross-view alignment regime. None / empty → pure
+    # band-aligned cache.
+    no_cache_layers=None,
     importance_method: str = "dino_attn",
     merge_alpha: float = 0.1,
     protect_last: bool = False,       # Line A default: L23 merged
@@ -692,6 +698,7 @@ def run_aggregator_regimevggt(
 
     if cache_band_starts is not None:
         cache_band_starts = sorted(set(cache_band_starts))
+    no_cache_set = set(no_cache_layers) if no_cache_layers else set()
 
     full_layers = {depth - 1} if protect_last else set()
     mid_lo, mid_hi = middle_range  # [mid_lo, mid_hi) — merge-only if protect_middle
@@ -726,9 +733,12 @@ def run_aggregator_regimevggt(
 
             # Cache key (band-based; NO subsample params so merge-only
             # and merge+subsample layers can share merge indices
-            # within the same band).
+            # within the same band). Layers in ``no_cache_layers`` are
+            # forced to recompute their merge index every layer.
             merge_cache_key = None
-            if layer_ratio > 0 and cache_band_starts is not None:
+            if (layer_ratio > 0
+                    and cache_band_starts is not None
+                    and i not in no_cache_set):
                 band_idx = sum(1 for s in cache_band_starts if s <= i) - 1
                 if band_idx >= 0:
                     merge_cache_key = (
