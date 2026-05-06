@@ -1,0 +1,21 @@
+# Core
+torch>=2.1.0
+torchvision>=0.16.0
+numpy>=1.24
+einops>=0.7.0
+
+# Image / data
+Pillow>=10.0
+opencv-python>=4.8
+
+# Evaluation
+trimesh>=4.0          # mesh / point-cloud IO for dense reconstruction eval
+scipy>=1.11           # SVD, alignment, evo trajectory utils
+matplotlib>=3.7       # diagnostic plots
+
+# VGGT model dependencies
+huggingface-hub>=0.20  # checkpoint download 
+safetensors>=0.4
+
+# Optional — only needed for FlashAttention path
+# flash-attn>=2.5.0    # install per your CUDA / torch version

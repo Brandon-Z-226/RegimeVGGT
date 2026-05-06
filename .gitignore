@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Checkpoints (downloaded separately — ckpt/README.md)
+ckpt/*.pt
+ckpt/*.pth
+ckpt/*.safetensors
+ckpt/*.bin
+
+# Evaluation outputs
+results/
+results_*/
+logs/
+*.log
+
+# Datasets — never commit
+datasets/
+data/raw/
+*.zip
+*.tar
+*.tar.gz
+
+# Misc
+.ipynb_checkpoints/
+*.npy
+!eval/data/*.npy
