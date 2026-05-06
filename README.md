@@ -37,12 +37,11 @@ All on top of stock VGGT-1B model_tracker weights, **no fine-tuning**.
 pip install -r requirements.txt
 ```
 
-Tested on a single NVIDIA H800 80 GB with PyTorch 2.1+, CUDA 11.8+, Python 3.10+.
-A GPU with ≥ 24 GB VRAM suffices for short sequences; ScanNet-1000 needs ≥ 80 GB.
+Tested on a single NVIDIA H800 80 GB with PyTorch 2.1+, CUDA 11.8+, Python 3.10+..
 
 ## Checkpoint
 
-RegimeVGGT uses the **VGGT-1B model_tracker** checkpoint with no
+RegimeVGGT uses the **model_tracker_fixed_e20** checkpoint with no
 fine-tuning — the upstream weights with the tracking head attached,
 distributed by Meta on Hugging Face.
 
@@ -139,6 +138,8 @@ places (kept in sync): `eval/eval_scannet50.py:HYBRID_CONFIG`, the three
 | `deep_merge_ratio`    | 0.99           | layers L18+                       |
 | `cache_band_starts`   | (0, 10, 18)    | three-band index cache            |
 | `importance_method`   | `dino_attn`    | DINOv2 [CLS] saliency (Ψ)         |
+| `protect_middle`      | True           | L10–13 do merge-only              |
+| `middle_range`        | (10, 14)       | half-open, covers L10–13          |
 
 
 **K/V-subsample axis** (Line B):
@@ -150,8 +151,7 @@ places (kept in sync): `eval/eval_scannet50.py:HYBRID_CONFIG`, the three
 | `sigma_deep`          | 1.7            | deep band σ                       |
 | `use_phase_shift`     | True           | per-frame phase rotation          |
 | `anchor_frame_idx`    | 0              | frame 0 kept full density         |
-| `protect_middle`      | True           | L10–13 do merge-only              |
-| `middle_range`        | (10, 14)       | half-open, covers L10–13          |
+
 
 ---
 
@@ -163,15 +163,3 @@ license.
 
 ---
 
-## Citation
-
-```bibtex
-@inproceedings{regimevggt2026,
-  title     = {(anonymous title for NeurIPS 2026 submission)},
-  author    = {Anonymous},
-  booktitle = {Submitted to NeurIPS 2026},
-  year      = {2026}
-}
-```
-
-Citation will be updated upon paper acceptance.
