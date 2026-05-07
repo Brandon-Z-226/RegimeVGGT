@@ -31,7 +31,7 @@ export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
 OUT_DIR="${REPO_ROOT}/results/regimevggt/tnt"
 mkdir -p "${OUT_DIR}"
 
-# AB2 canonical: Line-A merge (rho=0.99/0.50/0.99, cache=(0,10,18))
+# canonical RegimeVGGT config: Line-A merge (rho=0.99/0.50/0.99, cache=(0,10,18))
 # composed with Line-B uniform sigma_b=1.5 + frame-0 anchor.
 python "${REPO_ROOT}/eval/eval_pose_tnt.py" \
     --tnt_dir       "${TNT_DIR}" \

@@ -40,7 +40,7 @@ def _heads_to_preds(model, output_list, psi, imgs_tensor):
 
 
 def _run_regimevggt(model, imgs_tensor, args):
-    """Hybrid: Line A merge + Line B phase-shift subsample (+ optional anchor)."""
+    """RegimeVGGT: merge + phase-shift subsample subsample (+ optional anchor)."""
     from methods.regimevggt import run_aggregator_regimevggt
     imgs = imgs_tensor.unsqueeze(0) if imgs_tensor.dim() == 4 else imgs_tensor
     output_list, psi = run_aggregator_regimevggt(
@@ -58,8 +58,8 @@ def _run_regimevggt(model, imgs_tensor, args):
         sigma_shallow=args.hyb_sigma_shallow,
         sigma_deep=args.hyb_sigma_deep,
         use_phase_shift=args.hyb_use_phase_shift,
-        use_avggt_mean_fill=args.hyb_avggt_mean_fill,
-        use_avggt_full=args.hyb_avggt_full,
+        use_regimevggt_mean_fill=args.hyb_regimevggt_mean_fill,
+        use_regimevggt_full=args.hyb_regimevggt_full,
         protect_middle=args.hyb_protect_middle,
         middle_range=tuple(args.hyb_middle_range),
         anchor_frame_idx=(args.hyb_anchor_frame
@@ -134,8 +134,8 @@ def get_args_parser():
     parser.add_argument("--merge_strategy", type=str, default="bipartite",
                         choices=["bipartite", "importance", "random", "spatial"],
                         help="token merge strategy for importance_merging")
-    # Hybrid (Line A merge + Line B phase-shift subsample) flags.
-    # ── Line B (phase_shift) flags ──
+    # Merge-then-subsample composition flags.
+    # ── Phase-shift subsample flags ──
     parser.add_argument("--ps_sigma_s", type=float, default=1.5,
                         help="phase_shift: shallow band sigma (default 1.5).")
     parser.add_argument("--ps_sigma_m", type=float, default=1.5,
@@ -149,10 +149,10 @@ def get_args_parser():
                         help="phase_shift: enable phase shift (vs fixed grid).")
     parser.add_argument("--ps_anchor_frame", type=int, default=-1,
                         help="phase_shift: keep ALL K/V on this frame (-1 = no anchor).")
-    parser.add_argument("--ps_avggt_mean_fill", action="store_true",
-                        help="phase_shift: AVGGT mean-fill on dropped K/V.")
-    parser.add_argument("--ps_avggt_full", action="store_true",
-                        help="phase_shift: full AVGGT (selected + diagonal + mean-fill).")
+    parser.add_argument("--ps_regimevggt_mean_fill", action="store_true",
+                        help="phase_shift: RegimeVGGT mean-fill on dropped K/V.")
+    parser.add_argument("--ps_regimevggt_full", action="store_true",
+                        help="phase_shift: full RegimeVGGT (selected + diagonal + mean-fill).")
 
     parser.add_argument("--hyb_use_phase_shift", action="store_true",
                         help="regimevggt: enable phase-shift on merged K/V.")
@@ -162,17 +162,17 @@ def get_args_parser():
                         help="regimevggt: shallow band sigma; defaults to hyb_sigma_sub.")
     parser.add_argument("--hyb_sigma_deep", type=float, default=None,
                         help="regimevggt: deep band sigma; defaults to hyb_sigma_sub.")
-    parser.add_argument("--hyb_avggt_mean_fill", action="store_true",
-                        help="regimevggt: AVGGT mean-fill on merged K/V (no diagonal).")
-    parser.add_argument("--hyb_avggt_full", action="store_true",
-                        help="regimevggt: full AVGGT (selected + diagonal + mean-fill).")
+    parser.add_argument("--hyb_regimevggt_mean_fill", action="store_true",
+                        help="regimevggt: RegimeVGGT mean-fill on merged K/V (no diagonal).")
+    parser.add_argument("--hyb_regimevggt_full", action="store_true",
+                        help="regimevggt: full RegimeVGGT (selected + diagonal + mean-fill).")
     parser.add_argument("--hyb_protect_middle", action="store_true",
                         help="regimevggt: middle-band layers do merge only (no subsample).")
     parser.add_argument("--hyb_middle_range", type=int, nargs=2, default=[10, 18],
                         help="regimevggt: [start, end) range treated as middle band.")
     parser.add_argument("--hyb_anchor_frame", type=int, default=-1,
                         help="regimevggt: keep ALL merged tokens whose parent lies in "
-                             "this frame (Line B C2 anchor). -1 = no anchor.")
+                             "this frame (reference-frame anchor). -1 = no anchor.")
     return parser
 
 

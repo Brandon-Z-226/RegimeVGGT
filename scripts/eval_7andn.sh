@@ -31,7 +31,7 @@ export PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}"
 OUT_DIR="${REPO_ROOT}/results/regimevggt/7andn_kf${KF}"
 mkdir -p "${OUT_DIR}"
 
-# AB2 canonical: Line-A merge + Line-B uniform sigma_b=1.5 + frame-0 anchor.
+# canonical RegimeVGGT config: Line-A merge + Line-B uniform sigma_b=1.5 + frame-0 anchor.
 python "${REPO_ROOT}/eval/eval_7andN.py" \
     --datasets       7scenes NRGBD \
     --7scenes_root   "${SEVEN_ROOT}" \

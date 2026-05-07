@@ -285,7 +285,7 @@ def run_inference(model, images_tensor, method, args, dtype):
             imgs = imgs.unsqueeze(0)
 
         if method == "regimevggt":
-            # Line A × Line B: merge-then-subsample. Line A importance_merging config
+            # Merge-then-subsample composition. Token-merge config
             # (shallow_merge_ratio, merge_ratio_ours, deep_merge_ratio,
             # middle_merge_start, deep_merge_start, cache_band_starts,
             # no_protect_last, importance) controls merge.  hyb_sigma_sub
@@ -307,8 +307,8 @@ def run_inference(model, images_tensor, method, args, dtype):
                 sigma_shallow=args.hyb_sigma_shallow,
                 sigma_deep=args.hyb_sigma_deep,
                 use_phase_shift=args.hyb_use_phase_shift,
-                use_avggt_mean_fill=args.hyb_avggt_mean_fill,
-                use_avggt_full=args.hyb_avggt_full,
+                use_regimevggt_mean_fill=args.hyb_regimevggt_mean_fill,
+                use_regimevggt_full=args.hyb_regimevggt_full,
                 protect_middle=args.hyb_protect_middle,
                 middle_range=tuple(args.hyb_middle_range),
                 anchor_frame_idx=(args.hyb_anchor_frame
@@ -392,7 +392,7 @@ def parse_args():
                                  "geom_probe_l9", "none", "uniform"])
     parser.add_argument("--merge_strategy", type=str, default="bipartite",
                         choices=["bipartite", "importance", "random", "spatial"])
-    # Phase-shift K/V subsampling (Line B)
+    # Phase-shift K/V subsampling (K/V-subsample axis)
     parser.add_argument("--ps_sigma_s", type=float, default=2.0,
                         help="phase_shift method: shallow-band sigma (L < ps_band_boundaries[1]). "
                              "sigma=1 = keep all, sigma=1.5 = 3x3 tile 4/9 density, "
@@ -406,16 +406,16 @@ def parse_args():
                         help="phase_shift method: (b0, b1, b2) band starts")
     parser.add_argument("--ps_use_phase_shift", action="store_true",
                         help="phase_shift method: enable phase-shift across frames. "
-                             "Omit to get AVGGT fixed-grid baseline.")
-    parser.add_argument("--ps_avggt_mean_fill", action="store_true",
+                             "Omit to get RegimeVGGT fixed-grid baseline.")
+    parser.add_argument("--ps_regimevggt_mean_fill", action="store_true",
                         help="phase_shift method: selected + mean-fill only (sdpa). "
                              "No diagonal preservation.")
-    parser.add_argument("--ps_avggt_full", action="store_true",
-                        help="phase_shift method: full 3-component AVGGT "
+    parser.add_argument("--ps_regimevggt_full", action="store_true",
+                        help="phase_shift method: full 3-component RegimeVGGT "
                              "(selected + diagonal + mean-fill via LSE-combine). "
                              "Requires torch._scaled_dot_product_flash_attention. "
-                             "Overrides --ps_avggt_mean_fill.")
-    # C2: anchor frame keeps ALL K/V (the winning Line B augmentation).
+                             "Overrides --ps_regimevggt_mean_fill.")
+    # Reference-frame anchor: keeps ALL K/V on this frame.
     parser.add_argument("--ps_anchor_frame", type=int, default=-1,
                         help="C2: keep ALL K/V on this frame (e.g. 0). "
                              "-1 = no anchor.")
@@ -433,7 +433,7 @@ def parse_args():
     parser.add_argument("--ps_layer_phase_rotate", action="store_true",
                         help="Rotate phase by layer index so consecutive "
                              "global blocks see different grid offsets.")
-    # Hybrid merge-then-subsample (Line A + Line B)
+    # Merge-then-subsample composition flags.
     parser.add_argument("--hyb_sigma_sub", type=float, default=2.0,
                         help="regimevggt method: phase-shift sigma applied to merged K/V. "
                              "sigma=1 = keep all, sigma=1.5 = 3x3 tile 2x2 keep (44%), "
@@ -447,13 +447,13 @@ def parse_args():
     parser.add_argument("--hyb_use_phase_shift", action="store_true",
                         help="regimevggt method: enable phase-shift on merged K/V across frames. "
                              "Omit for fixed-grid fallback on merged tokens.")
-    parser.add_argument("--hyb_avggt_mean_fill", action="store_true",
+    parser.add_argument("--hyb_regimevggt_mean_fill", action="store_true",
                         help="regimevggt method: mean-fill only on the post-merge K/V subset.")
-    parser.add_argument("--hyb_avggt_full", action="store_true",
-                        help="regimevggt method: full 3-component AVGGT (selected + "
+    parser.add_argument("--hyb_regimevggt_full", action="store_true",
+                        help="regimevggt method: full 3-component RegimeVGGT (selected + "
                              "diagonal + mean-fill via LSE-combine) on the post-merge "
                              "K/V subset. Requires flash-attention LSE support. "
-                             "Overrides --hyb_avggt_mean_fill.")
+                             "Overrides --hyb_regimevggt_mean_fill.")
     parser.add_argument("--hyb_protect_middle", action="store_true",
                         help="regimevggt method: middle-band layers do merge only "
                              "(no subsample). Shallow/deep layers do merge+subsample. "
@@ -463,7 +463,7 @@ def parse_args():
                              "Default: 10 18 (Part A rank analysis convention).")
     parser.add_argument("--hyb_anchor_frame", type=int, default=-1,
                         help="regimevggt method: keep ALL merged tokens whose "
-                             "parent lies in this frame (Line B C2 anchor). "
+                             "parent lies in this frame (reference-frame anchor). "
                              "-1 = no anchor.")
     return parser.parse_args()
 

@@ -1,1 +1,1 @@
-"""RegimeVGGT acceleration method (Hybrid: token merge x K/V phase-shift)."""
+"""RegimeVGGT acceleration method (RegimeVGGT: token merge x K/V phase-shift)."""

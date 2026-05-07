@@ -1,10 +1,10 @@
-"""Hybrid merge-then-subsample aggregator (Line A × Line B composition).
+"""RegimeVGGT merge-then-subsample aggregator.
 
 Pipeline per Stage 2 global layer:
   1. Standard QKV + q_norm/k_norm + RoPE (same as vanilla Attention).
   2. FastVGGT-style bipartite merge on the full token set — reduces
      Q, K, V jointly from N to N_m via cluster averaging. Top-α tokens
-     by Ψ are protected from being merge sources (existing Line A logic).
+     by Ψ are protected from being merge sources (merge-source protection logic).
   3. Phase-shifted grid subsample on the merged K/V only. Each merged
      token inherits its "parent" spatial position (dst position for
      regular merges, or the unmerged-src / protected position otherwise).
@@ -18,12 +18,13 @@ Pipeline per Stage 2 global layer:
      (Toggle: protect_psi_in_subsample, default True.)
   4. Scaled dot-product attention with unequal Q (N_m) and K/V (K_sub)
      dimensions. Output is N_m tokens.
-  5. Proj + unmerge (standard Line A).
+  5. Proj + unmerge (standard merge step).
 
-Speedup intuition: Line A already reduces attention to O(N_m²); hybrid
-adds O(N_m · K_sub) where K_sub ≈ N_m / sigma_sub², i.e. ~4x attention
-speedup at sigma_sub=2 versus Line A alone. Wall-clock gain is bounded
-by non-attention costs (MLP on N_m tokens, unchanged from Line A).
+Speedup intuition: token merge already reduces attention to O(N_m²);
+the K/V-subsample step adds O(N_m · K_sub) where K_sub ≈ N_m / sigma_sub²,
+i.e. ~4x attention speedup at sigma_sub=2 versus merge alone. Wall-clock
+gain is bounded by non-attention costs (MLP on N_m tokens, unchanged
+from the merge step).
 
 L23 still protected (Full Global, no subsample) to match RegimeVGGT's
 DPT-tap convention.
@@ -42,7 +43,7 @@ from methods.fastvggt_merge import token_merge_bipartite2d
 
 
 # ─────────────────────────────────────────────────────────────────
-# Flash attention with LSE export (used by _avggt_attention_full)
+# Flash attention with LSE export (used by _regimevggt_attention_full)
 # ─────────────────────────────────────────────────────────────────
 def _chunked_attn_with_lse(q, k, v, scale, chunk_size=4096):
     """Manual softmax attention returning (output, LSE).
@@ -96,12 +97,12 @@ def _flash_attn_with_lse(q, k, v, scale):
 
 
 # ─────────────────────────────────────────────────────────────────
-# AVGGT-style attention — mean-fill via sdpa (flash-compatible)
+# RegimeVGGT-style attention — mean-fill via sdpa (flash-compatible)
 # ─────────────────────────────────────────────────────────────────
-def _avggt_attention(q, k_all, v_all, keeper_idx, scale):
-    """AVGGT subsampled global attention with mean-fill (no diagonal).
+def _regimevggt_attention(q, k_all, v_all, keeper_idx, scale):
+    """RegimeVGGT subsampled global attention with mean-fill (no diagonal).
 
-    Three-component AVGGT formulation:
+    Three-component RegimeVGGT formulation:
       1. Selected K/V subset at ``keeper_idx``
       2. Per-query diagonal self-preservation (q_i sees k_i)   — OMITTED here
       3. Mean-fill: single mean of dropped K/V, attended by all queries
@@ -138,10 +139,10 @@ def _avggt_attention(q, k_all, v_all, keeper_idx, scale):
 
 
 # ─────────────────────────────────────────────────────────────────
-# Full AVGGT — selected + diagonal + mean-fill via LSE combine
+# Full RegimeVGGT — selected + diagonal + mean-fill via LSE combine
 # ─────────────────────────────────────────────────────────────────
-def _avggt_attention_full(q, k_all, v_all, keeper_idx, scale):
-    """Full 3-component AVGGT attention:
+def _regimevggt_attention_full(q, k_all, v_all, keeper_idx, scale):
+    """Full 3-component RegimeVGGT attention:
       1. Selected K/V subset at keeper_idx
       2. Per-query diagonal self-preservation  (q_i <-> k_i)
       3. Mean-fill: single mean of dropped K/V, attended by all queries
@@ -154,7 +155,7 @@ def _avggt_attention_full(q, k_all, v_all, keeper_idx, scale):
     B, H, Nq, D = q.shape
     _, _, Nk, _ = k_all.shape
     assert Nq == Nk, (
-        f"_avggt_attention_full needs Nq == Nk, got {Nq} vs {Nk}"
+        f"_regimevggt_attention_full needs Nq == Nk, got {Nq} vs {Nk}"
     )
 
     # Part A: flash attention on selected K/V with LSE.
@@ -293,13 +294,13 @@ def _build_keeper_mask_on_merged(
     keep = keep | is_special
 
     # Anchor frame: keep ALL merged tokens whose parent lies in that frame
-    # (the "global truth ref" trick from Line B C2 winner).
+    # (the "global truth ref" trick from reference-frame anchor).
     if anchor_frame_idx is not None:
         keep = keep | (frame == int(anchor_frame_idx))
 
     # Ψ-protected tokens: never subsample. A merged token survives if its
     # parent (dst) global index is flagged in protected_global_idx — same
-    # top-α set that Line A's merge protection uses, so the importance
+    # top-α set that the merge-source protection set uses, so the importance
     # tokens stay full-density on both axes.
     if protected_global_idx is not None:
         keep = keep | protected_global_idx.to(keep.device)[g]
@@ -321,7 +322,7 @@ def _build_psi_protect_mask(
     the K/V phase-shift subsample. Frame 0 patches are all protected;
     frames 1..S-1 protect the top-α-by-Ψ patches.
 
-    Hoisted out of `_hybrid_global_forward` so the topk + bool tensor
+    Hoisted out of `_regimevggt_global_forward` so the topk + bool tensor
     allocation runs ONCE per scene instead of 24× per layer.
     """
     if alpha_kv <= 0 or importance_scores is None:
@@ -332,7 +333,7 @@ def _build_psi_protect_mask(
     protected_global = torch.zeros(
         S * tokens_per_frame, dtype=torch.bool, device=dev,
     )
-    # Frame 0: protect every patch (matches Line A merge convention).
+    # Frame 0: protect every patch (matches the merge-step convention).
     base0 = num_special
     protected_global[base0:base0 + T_patches] = True
     # Frames 1..S-1: top-α by Ψ.
@@ -349,9 +350,9 @@ def _build_psi_protect_mask(
 
 
 # ─────────────────────────────────────────────────────────────────
-# Hybrid global block forward (merge + subsample K/V)
+# RegimeVGGT global block forward (merge + subsample K/V)
 # ─────────────────────────────────────────────────────────────────
-def _hybrid_global_forward(
+def _regimevggt_global_forward(
     block,
     x_all,                       # [B, N, C] tokens for this layer
     pos,                         # [B, N, 2] RoPE positions
@@ -364,8 +365,8 @@ def _hybrid_global_forward(
     sigma_sub,                # int (1, 2, 3, ...) or float (1.5)
     use_phase_shift: bool,
     merge_alpha: float = 0.1,
-    use_avggt_mean_fill: bool = False,
-    use_avggt_full: bool = False,
+    use_regimevggt_mean_fill: bool = False,
+    use_regimevggt_full: bool = False,
     anchor_frame_idx=None,
     protect_psi_in_subsample: bool = True,
     psi_protect_alpha=None,           # default: reuse merge_alpha
@@ -377,7 +378,7 @@ def _hybrid_global_forward(
     Mirrors Attention.forward's computation path, does not call block.attn.forward
     directly — we need a custom attention with unequal Q and K/V sizes.
 
-    When protect_psi_in_subsample=True, the same top-α tokens that Line A's
+    When protect_psi_in_subsample=True, the same top-α tokens that the merge step's
     merge logic protects from being merge sources are also marked always-kept
     in the K/V subsample (frame 0 fully protected). Pass psi_protect_alpha to
     decouple the two thresholds; defaults to merge_alpha.
@@ -464,13 +465,13 @@ def _hybrid_global_forward(
     )
 
     # ── 5. Attention Q_m (N_m) × K_sub × V_sub ──
-    if use_avggt_full:
-        # Full AVGGT: selected + diagonal + mean-fill via LSE-combine.
-        attn_out = _avggt_attention_full(q_m, k_m, v_m, keeper_idx, attn_mod.scale)
+    if use_regimevggt_full:
+        # Full RegimeVGGT: selected + diagonal + mean-fill via LSE-combine.
+        attn_out = _regimevggt_attention_full(q_m, k_m, v_m, keeper_idx, attn_mod.scale)
         del q_m, k_m, v_m
-    elif use_avggt_mean_fill:
-        # Partial AVGGT: selected + mean-fill (no diagonal).
-        attn_out = _avggt_attention(q_m, k_m, v_m, keeper_idx, attn_mod.scale)
+    elif use_regimevggt_mean_fill:
+        # Partial RegimeVGGT: selected + mean-fill (no diagonal).
+        attn_out = _regimevggt_attention(q_m, k_m, v_m, keeper_idx, attn_mod.scale)
         del q_m, k_m, v_m
     else:
         k_sub = k_m[:, :, keeper_idx, :]
@@ -562,20 +563,20 @@ def run_aggregator_regimevggt(
     no_cache_layers=None,
     importance_method: str = "dino_attn",
     merge_alpha: float = 0.1,
-    protect_last: bool = False,       # Line A default: L23 merged
-    # Line B (phase-shift subsample on merged K/V) config.
+    protect_last: bool = False,       # default: L23 merged
+    # K/V phase-shift subsample config.
     sigma_sub=2,                      # fallback for any band w/o explicit value
     sigma_shallow=None,               # L in [0, mid_lo) — defaults to sigma_sub
     sigma_deep=None,                  # L in [mid_hi, depth) — defaults to sigma_sub
     use_phase_shift: bool = True,
-    use_avggt_mean_fill: bool = False,
-    use_avggt_full: bool = False,
+    use_regimevggt_mean_fill: bool = False,
+    use_regimevggt_full: bool = False,
     # Angle 2: rank-aware layer selection.
     #   protect_middle=True → layers in [middle_range) do merge only
-    #   (Line A path), not merge+subsample. Shallow/deep keep hybrid.
+    #   (merge-only path), not merge+subsample. Shallow/deep keep merge+subsample.
     protect_middle: bool = False,
     middle_range=(10, 18),
-    # Line B C2 anchor (winning T&T config): keep ALL merged tokens whose
+    # reference-frame anchor (winning T&T config): keep ALL merged tokens whose
     # parent lies in this frame. Mirrors phase_shift's anchor_frame_idx.
     anchor_frame_idx=None,
     # Ψ-protected tokens skip the K/V subsample (importance tokens
@@ -587,9 +588,9 @@ def run_aggregator_regimevggt(
     protect_psi_in_subsample: bool = False,
     psi_protect_alpha=None,
 ):
-    """Hybrid merge-then-subsample aggregator.
+    """RegimeVGGT merge-then-subsample aggregator.
 
-    Default config mirrors Line A `band_0_10_14_nolast` plus σ_sub=2
+    Default config mirrors the `band_0_10_14_nolast` recipe plus σ_sub=2
     phase-shift on merged K/V at every Stage 2 layer (L0-22, all 23
     layers when protect_last=False; L0-22 only if protect_last=True).
     """
@@ -678,7 +679,7 @@ def run_aggregator_regimevggt(
     tokens_per_frame = P  # = num_special + Hp*Wp
 
     # ── Scene-level Ψ-protect-K/V mask (pre-computed once, used at every
-    # global layer). Hoisted out of `_hybrid_global_forward` because the
+    # global layer). Hoisted out of `_regimevggt_global_forward` because the
     # mask depends only on importance_scores + S + T_patches, all of which
     # are scene-level. Building it per-layer was paying topk + 1M-bool
     # tensor allocation × 24 layers × 50 scenes on ScanNet N=1000.
@@ -709,7 +710,7 @@ def run_aggregator_regimevggt(
     sig_deep    = sigma_deep    if sigma_deep    is not None else sigma_sub
 
     for i in range(depth):
-        # Always run Frame block first (unchanged by hybrid).
+        # Always run Frame block first (unchanged by RegimeVGGT).
         if tokens.shape[0] != B * S:
             tokens = tokens.view(B * S, P, C)
         frame_pos = pos.view(B * S, P, 2) if pos is not None else None
@@ -746,7 +747,7 @@ def run_aggregator_regimevggt(
                     )
 
             in_middle = mid_lo <= i < mid_hi
-            # Per-band sigma selection for the hybrid branch.
+            # Per-band sigma selection for the merge+subsample branch.
             if i < mid_lo:
                 layer_sigma = sig_shallow
             elif i >= mid_hi:
@@ -755,7 +756,7 @@ def run_aggregator_regimevggt(
                 layer_sigma = sig_middle
 
             if protect_middle and in_middle:
-                # Merge only (Line A path): call the global block with
+                # Merge only (merge-only path): call the global block with
                 # global_merging; Attention.forward handles merge+proj+
                 # unmerge internally using the pretrained weights.
                 agg.global_blocks[i].attn.merge_ratio = layer_ratio
@@ -767,8 +768,8 @@ def run_aggregator_regimevggt(
                     merge_alpha=merge_alpha,
                 )
             else:
-                # Merge + phase-shift subsample (hybrid path).
-                tokens_global = _hybrid_global_forward(
+                # Merge + phase-shift subsample (merge+subsample path).
+                tokens_global = _regimevggt_global_forward(
                     agg.global_blocks[i], tokens_global, global_pos,
                     merge_ratio=layer_ratio,
                     importance_scores=psi,
@@ -779,8 +780,8 @@ def run_aggregator_regimevggt(
                     sigma_sub=layer_sigma,
                     use_phase_shift=use_phase_shift,
                     merge_alpha=merge_alpha,
-                    use_avggt_mean_fill=use_avggt_mean_fill,
-                    use_avggt_full=use_avggt_full,
+                    use_regimevggt_mean_fill=use_regimevggt_mean_fill,
+                    use_regimevggt_full=use_regimevggt_full,
                     anchor_frame_idx=anchor_frame_idx,
                     protect_psi_in_subsample=protect_psi_in_subsample,
                     psi_protect_alpha=psi_protect_alpha,

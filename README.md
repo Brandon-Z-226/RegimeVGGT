@@ -126,10 +126,10 @@ RegimeVGGT/
 ## Method configuration (canonical)
 
 The single canonical recipe across all benchmarks is defined in three
-places (kept in sync): `eval/eval_scannet50.py:HYBRID_CONFIG`, the three
+places (kept in sync): `eval/eval_scannet50.py:REGIMEVGGT_CONFIG`, the three
 `scripts/eval_*.sh` wrappers, and `demo.py`.
 
-**Token-merge axis** (Line A):
+**Token-merge axis**:
 
 | Parameter             | Value          | Notes                             |
 |-----------------------|----------------|-----------------------------------|
@@ -143,7 +143,7 @@ places (kept in sync): `eval/eval_scannet50.py:HYBRID_CONFIG`, the three
 | `middle_range`        | (10, 14)       | half-open, covers L10–13          |
 
 
-**K/V-subsample axis** (Line B):
+**K/V-subsample axis** (K/V-subsample axis):
 
 | Parameter             | Value          | Notes                             |
 |-----------------------|----------------|-----------------------------------|

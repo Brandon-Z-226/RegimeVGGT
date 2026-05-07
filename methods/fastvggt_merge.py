@@ -302,7 +302,7 @@ def token_merge_bipartite2d(
         # Compute the global original index of each merged-output token, in the
         # [unm, dst, protected] order produced by the merge closure. This is
         # needed by downstream code that wants to subsample merged tokens by
-        # their original spatial position (e.g. hybrid merge-then-subsample).
+        # their original spatial position (e.g. merge-then-subsample).
         # Shape: [N_m] where N_m = unm_len + num_dst + num_protected_actual.
         unm_global = gather(
             a_idx.squeeze(-1), dim=1, index=unm_idx.squeeze(-1)
@@ -460,7 +460,7 @@ def token_merge_bipartite2d(
         return out
 
     # Expose merged-token → original-global-index mapping as a closure
-    # attribute. Downstream code (hybrid merge-then-subsample) uses this to
+    # attribute. Downstream code (merge-then-subsample) uses this to
     # map merged tokens back to spatial positions for phase-shift masking.
     # Attribute assignment on functions is legal in Python.
     merge.merged_global_idx = merged_global_idx

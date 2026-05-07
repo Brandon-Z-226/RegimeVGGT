@@ -22,7 +22,7 @@ import torch
 
 # ── Path setup: FastVGGT as primary vggt package ──
 EVAL_DIR = Path(__file__).resolve().parent
-ADAVGGT_ROOT = EVAL_DIR / ".."
+ADRegimeVGGT_ROOT = EVAL_DIR / ".."
 # Resolve FastVGGT location: post-reorg layout uses other_method/FastVGGT/,
 # AutoDL legacy layout keeps FastVGGT/ at the repo root. Try both.
 def _resolve_fastvggt_root(eval_dir):
@@ -42,8 +42,8 @@ FASTVGGT_ROOT = _resolve_fastvggt_root(EVAL_DIR)
 # FastVGGT first (model + eval_utils)
 sys.path.insert(0, str(FASTVGGT_ROOT))
 # RegimeVGGT methods (importance_merging.py)
-if str(ADAVGGT_ROOT) not in sys.path:
-    sys.path.append(str(ADAVGGT_ROOT))
+if str(ADRegimeVGGT_ROOT) not in sys.path:
+    sys.path.append(str(ADRegimeVGGT_ROOT))
 
 from vggt.models.vggt import VGGT
 from vggt.utils.eval_utils import (
@@ -63,7 +63,7 @@ from vggt.utils.geometry import unproject_depth_map_to_point_map
 # ── RegimeVGGT canonical = AB2 (Line-A merge + Line-B subsample) ──
 # Single recipe across all benchmarks.
 # Paper: T&T AUC@30 0.9105 / 5.01x; ScanNet N=1000 CD 0.472 / 71.7s.
-HYBRID_CONFIG = dict(
+REGIMEVGGT_CONFIG = dict(
     shallow_merge_ratio=0.99,
     merge_ratio=0.50,
     deep_merge_ratio=0.99,
@@ -77,8 +77,8 @@ HYBRID_CONFIG = dict(
     sigma_shallow=1.5,                          # shallow-band sigma
     sigma_deep=1.7,                             # deep-band sigma
     use_phase_shift=True,
-    use_avggt_mean_fill=False,
-    use_avggt_full=False,
+    use_regimevggt_mean_fill=False,
+    use_regimevggt_full=False,
     protect_middle=True,                        # L10-13 do merge only (no subsample)
     middle_range=(10, 14),
     anchor_frame_idx=0,
@@ -87,7 +87,7 @@ HYBRID_CONFIG = dict(
 
 @torch.no_grad()
 def infer_regimevggt_and_reconstruct(model, vgg_input, dtype, depth_conf_thresh):
-    """Run regimevggt (Line A merge + Line B phase-shift + anchor) and reconstruct."""
+    """Run regimevggt (merge + phase-shift + anchor) and reconstruct."""
     from methods.regimevggt import run_aggregator_regimevggt
 
     torch.cuda.synchronize()
@@ -97,7 +97,7 @@ def infer_regimevggt_and_reconstruct(model, vgg_input, dtype, depth_conf_thresh)
         if imgs.dim() == 4:
             imgs = imgs.unsqueeze(0)
 
-        output_list, psi = run_aggregator_regimevggt(model, imgs, **HYBRID_CONFIG)
+        output_list, psi = run_aggregator_regimevggt(model, imgs, **REGIMEVGGT_CONFIG)
 
         pose_enc_list = model.camera_head(output_list)
         pose_enc = pose_enc_list[-1]
@@ -144,7 +144,7 @@ def load_model(method, ckpt_path, merge_ratio=0.9):
         model = VGGT(merging=None)
     elif method == "regimevggt":
         # RegimeVGGT drives merge from the aggregator wrapper, not VGGT.merging.
-        model = VGGT(merging=0, merge_ratio=HYBRID_CONFIG["merge_ratio"])
+        model = VGGT(merging=0, merge_ratio=REGIMEVGGT_CONFIG["merge_ratio"])
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -202,7 +202,7 @@ if __name__ == "__main__":
 
     # Print RegimeVGGT config if running regimevggt
     if "regimevggt" in methods:
-        print(f"RegimeVGGT config: {HYBRID_CONFIG}")
+        print(f"RegimeVGGT config: {REGIMEVGGT_CONFIG}")
         if args.tag:
             print(f"Ablation tag: {args.tag}")
 
