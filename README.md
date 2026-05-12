@@ -33,7 +33,7 @@ matched reconstruction quality.
 | Benchmark                       | Metric          | Result               |
 |---------------------------------|-----------------|----------------------|
 | Tanks & Temples (kf=1, 6 scenes)| AUC@30 / time   | 0.9105 / 111s (5.01x)|
-| ScanNet-50 (1000 input frames)  | Chamfer / time  | 0.472 / 71.7s        |
+| ScanNet-50 (1000 input frames)  | Chamfer / time  | 0.472 / 71.7s (6.70x)|
 
 ---
 
