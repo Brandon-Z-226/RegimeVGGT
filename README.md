@@ -6,6 +6,10 @@
 > and original repository links are intentionally omitted for double-blind
 > review.
 
+<p align="center">
+  <img src="image/overview.png" width="900" alt="RegimeVGGT pipeline overview">
+</p>
+
 ---
 
 ## What's here
@@ -28,6 +32,52 @@ All on top of stock VGGT-1B model_tracker weights, **no fine-tuning**.
 |---------------------------------|-----------------|----------------------|
 | Tanks & Temples (kf=1, 6 scenes)| AUC@30 / time   | 0.9105 / 111s (5.01x)|
 | ScanNet-50 (1000 input frames)  | Chamfer / time  | 0.472 / 71.7s        |
+
+---
+
+## Why three bands?
+
+Two independent diagnostics on stock VGGT's 24 aggregator layers identify the
+same **shallow / middle / deep** partition that RegimeVGGT exploits.
+
+<p align="center">
+  <img src="image/three_band_attention.png" width="850"
+       alt="Cross-frame attention across layers reveals three regimes">
+  <br>
+  <em>Cross-frame attention is diffuse in shallow layers (L1, 3, 5),
+  localized along the correspondence diagonal in the middle band (L13, 15),
+  and collapsed in deep layers (L21, 23).</em>
+</p>
+
+<p align="center">
+  <img src="image/rank_spectrum.png" width="700"
+       alt="Effective attention rank inverted-U across layers">
+  <br>
+  <em>Effective rank of the global-attention matrix is universally
+  inverted-U-shaped, peaking at the middle band L11–L18. Shallow and deep
+  flanks are nearly rank-1 (compressible); the middle band requires denser
+  K/V support to preserve cross-view correspondence.</em>
+</p>
+
+The acceleration policy follows the rank profile: aggressive merge in the
+shallow + deep flanks, conservative merge with full K/V support in the
+middle band, and protected geometry-token / register / frame-0 keys
+throughout.
+
+---
+
+## Qualitative pose on long sequences
+
+<p align="center">
+  <img src="image/pose_trajectory.png" width="900"
+       alt="ScanNet-50 1000-frame pose trajectory">
+  <br>
+  <em>Predicted camera trajectories on ScanNet-50 <code>scene0648_01</code>
+  under 1000-frame inference. Left: VGGT* baseline. Center: RegimeVGGT.
+  Right: FastVGGT. Predictions colored by per-frame ATE; ground truth in
+  gray. RegimeVGGT preserves global loop closure at <strong>5×</strong> the
+  speed of VGGT*.</em>
+</p>
 
 ---
 
@@ -107,6 +157,7 @@ RegimeVGGT/
 ├── LICENSE
 ├── requirements.txt
 ├── demo.py                    # minimal single-scene smoke test
+├── image/                     # paper figures referenced above
 ├── methods/
 │   ├── regimevggt.py          # main aggregator: token merge x K/V phase-shift
 │   └── fastvggt_merge.py      # ToMe bipartite-2d primitive
