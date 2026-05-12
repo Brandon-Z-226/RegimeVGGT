@@ -12,21 +12,23 @@
 
 ---
 
-## What's here
+## Abstract
 
-A single training-free acceleration of VGGT-1B model_tracker's global self-attention.
-The method composes two orthogonal compressions of the same global block:
-
-- **Token merging** on the token-count axis — three-band ratio
-  ($\rho_s, \rho_m, \rho_d$) with band-aligned index cache and a
-  DINOv2-saliency protection set;
-- **K/V phase-shifted subsampling** on the K/V-set axis — U-shape
-  per-band $\sigma$ with a frame-0 anchor preserving long-range
-  coordinate consistency;
-- with the rank-peak sub-band L10–13 doing **merge-only** (no subsample
-  on top), to protect the cross-view alignment regime.
-
-All on top of stock VGGT-1B model_tracker weights, **no fine-tuning**.
+Visual Geometry Grounded Transformer (VGGT) recovers dense 3D scene
+structure from multi-view images in one forward pass, but quadratic
+cross-frame attention limits its scalability. Existing training-free
+accelerators reduce computation uniformly along one axis, missing layer
+heterogeneity. Our spectral, probing, and causal analyses reveal three
+regimes: shallow layers lack cross-view structure, middle layers drive
+cross-view alignment, and deep layers are redundant for dense geometry
+yet their cross-frame attention remains essential for pose. RegimeVGGT
+applies layer-wise U-shaped compression along two axes: *Saliency-Guided
+Banded Merging* protects geometry- and edge-salient tokens, while
+*Selectively Protected K/V Downsampling* preserves cross-frame spatial
+coverage and the pose-critical path through a phase-shifted spatial
+grid, a reference-frame anchor, and uncompressed camera/register tokens.
+Training-free, RegimeVGGT achieves a **6.7×** speedup over VGGT* at
+matched reconstruction quality.
 
 | Benchmark                       | Metric          | Result               |
 |---------------------------------|-----------------|----------------------|
@@ -117,28 +119,16 @@ The checkpoint is subject to the original VGGT license; see
 
 ## Reproduce paper numbers
 
-Three reproduction entry points live in `scripts/`. Each reads dataset
-paths and `CKPT` from environment variables — no hardcoded paths,
-no CLI argument needed.
+Reproduction entry points live in `scripts/`. Each reads dataset paths
+and `CKPT` from environment variables — no hardcoded paths, no CLI
+argument needed.
 
 ```bash
-# Tanks & Temples 6-scene pose (Table 4)
-TNT_DIR=/path/to/tnt/training \
-TNT_COLMAP_DIR=/path/to/tnt/poses \
-CKPT=ckpt/model_tracker_fixed_e20.pt \
-    bash scripts/eval_tnt.sh
-
 # 7Scenes + NRGBD dense reconstruction (Tables 1 & 2)
 SEVEN_ROOT=/path/to/7scenes \
 NRGBD_ROOT=/path/to/nrgbd \
 CKPT=ckpt/model_tracker_fixed_e20.pt \
     bash scripts/eval_7andn.sh
-
-# ScanNet-50 long-sequence (Tables 3 & 9)
-SCANNET_DATA=/path/to/scannet/processed \
-SCANNET_GT_PLY=/path/to/scannet/scans \
-CKPT=ckpt/model_tracker_fixed_e20.pt \
-    bash scripts/eval_scannet.sh
 ```
 
 Each run writes `summary.json` and `logs.txt` under
@@ -156,7 +146,6 @@ RegimeVGGT/
 ├── README.md                  # this file
 ├── LICENSE
 ├── requirements.txt
-├── demo.py                    # minimal single-scene smoke test
 ├── image/                     # paper figures referenced above
 ├── methods/
 │   ├── regimevggt.py          # main aggregator: token merge x K/V phase-shift
@@ -171,39 +160,6 @@ RegimeVGGT/
     ├── eval_7andn.sh          # 7Scenes + NRGBD dense recon
     └── eval_scannet.sh        # ScanNet-50
 ```
-
----
-
-## Method configuration (canonical)
-
-The single canonical recipe across all benchmarks is defined in three
-places (kept in sync): `eval/eval_scannet50.py:REGIMEVGGT_CONFIG`, the three
-`scripts/eval_*.sh` wrappers, and `demo.py`.
-
-**Token-merge axis**:
-
-| Parameter             | Value          | Notes                             |
-|-----------------------|----------------|-----------------------------------|
-| `shallow_merge_ratio` | 0.99           | layers L0–9                       |
-| `merge_ratio`         | 0.50           | layers L10–17                     |
-| `deep_merge_ratio`    | 0.99           | layers L18+                       |
-| `cache_band_starts`   | (0, 10, 18)    | three-band index cache            |
-| `no_cache_layers`     | {10, 11, 12, 13} | rank-peak layers: recompute every layer |
-| `importance_method`   | `dino_attn`    | DINOv2 [CLS] saliency (Ψ)         |
-| `protect_middle`      | True           | L10–13 do merge-only              |
-| `middle_range`        | (10, 14)       | half-open, covers L10–13          |
-
-
-**K/V-subsample axis** (K/V-subsample axis):
-
-| Parameter             | Value          | Notes                             |
-|-----------------------|----------------|-----------------------------------|
-| `sigma_shallow`       | 1.5            | shallow band σ                    |
-| `sigma_sub`           | 1.3            | middle band σ                     |
-| `sigma_deep`          | 1.7            | deep band σ                       |
-| `use_phase_shift`     | True           | per-frame phase rotation          |
-| `anchor_frame_idx`    | 0              | frame 0 kept full density         |
-
 
 ---
 
